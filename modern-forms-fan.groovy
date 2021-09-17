@@ -7,6 +7,8 @@
 //
 // Requires `ipAddress` be set to the IP address of the device.
 // Make sure to give your device a static DHCP address, as it is not discoverable over the network.
+//
+// For fan devices without a light, disable the "Enable light" slider.
 
 // Copyright 2021 Ben Hamilton
 //
@@ -38,6 +40,7 @@ metadata {
         input "ipAddress", "text", title: "Fan IP Address", required: true
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
         input name: "pollIntervalSecs", type: "number", title: "Poll Interval (Seconds)", defaultValue: 30
+        input name: "lightEnabled", type: "bool", title: "Enable light", defaultValue: true
     }
 }
 
@@ -324,18 +327,26 @@ void sendEventsForNewState(newState) {
         device.sendEvent(name: "direction", value: newState.fanDirection, descriptionText: "${device.displayName} fan direction was changed to ${newState.fanDirection}")
     }
 
-    def lightDevice = getChildLightDevice()
-    String newLightSwitchValue = newState.lightOn ? "on" : "off"
-    if (lightDevice.currentValue("switch") != newLightSwitchValue) {
-        lightDevice.sendEvent(name: "switch", value: newLightSwitchValue, descriptionText: "${lightDevice.displayName} light was turned ${newLightSwitchValue}")
-    }
-    if (lightDevice.currentValue("level") != newState.lightBrightness) {
-        lightDevice.sendEvent(name: "level", value: newState.lightBrightness, descriptionText: "${lightDevice.displayName} light level was changed to ${newState.lightBrightness}%", unit: "%")
+    if (lightEnabled) {
+	def lightDevice = getChildLightDevice()
+	String newLightSwitchValue = newState.lightOn ? "on" : "off"
+	if (lightDevice.currentValue("switch") != newLightSwitchValue) {
+            lightDevice.sendEvent(name: "switch", value: newLightSwitchValue, descriptionText: "${lightDevice.displayName} light was turned ${newLightSwitchValue}")
+	}
+	if (lightDevice.currentValue("level") != newState.lightBrightness) {
+            lightDevice.sendEvent(name: "level", value: newState.lightBrightness, descriptionText: "${lightDevice.displayName} light level was changed to ${newState.lightBrightness}%", unit: "%")
+	}
+    } else {
+	deleteChildLightDevice()
     }
 }
 
+def getChildLightDeviceId() {
+    return "${device.deviceNetworkId}-light"
+}
+
 def getChildLightDevice() {
-    String childDeviceId = "${device.deviceNetworkId}-light"
+    String childDeviceId = getChildLightDeviceId()
     def childDevice = getChildDevice(childDeviceId)
     if (childDevice) {
         return childDevice
@@ -343,4 +354,10 @@ def getChildLightDevice() {
     if (logEnable) log.debug("Creating child dimmer device ${childDeviceId}")
     childDevice = addChildDevice("hubitat", "Generic Component Dimmer", childDeviceId, [name: "${device.displayName} - Light", isComponent: true])
     return childDevice
+}
+
+def deleteChildLightDevice() {
+    String childDeviceId = getChildLightDeviceId()
+    if (logEnable) log.debug("Deleting child dimmer device ${childDeviceId}")
+    deleteChildDevice(childDeviceId)
 }
